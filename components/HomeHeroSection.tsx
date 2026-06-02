@@ -1,4 +1,4 @@
-import { CENTER_NAV_LINKS, HERO_VIDEO_SRC } from '@/lib/constants'
+import { CENTER_NAV_LINKS, HERO_VIDEO_SRC } from "@/lib/constants";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { ChevronDownIcon } from "lucide-react";
 import Image from "next/image";
@@ -60,7 +60,12 @@ const HomeHeroSection = () => {
           <div className="home-nav-auth">
             <Show when="signed-out">
               <SignInButton mode="modal" fallbackRedirectUrl="/studio">
-                <Button type="button" variant="outline" size="sm" className="home-btn-signin">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="home-btn-signin"
+                >
                   Sign In
                 </Button>
               </SignInButton>
@@ -72,7 +77,11 @@ const HomeHeroSection = () => {
             </Show>
 
             <Show when="signed-in">
-              <Button variant="outline" asChild className="home-btn-studio-outline">
+              <Button
+                variant="outline"
+                asChild
+                className="home-btn-studio-outline"
+              >
                 <Link href="/studio" prefetch={false}>
                   Studio
                 </Link>
@@ -81,10 +90,12 @@ const HomeHeroSection = () => {
             </Show>
           </div>
         </nav>
-         <div className="home-hero-copy">
+        <div className="home-hero-copy">
           <h1 className="hero-title home-hero-title">
             <span className="block">High-fidelity style transfer.</span>
-            <span className="home-hero-tagline">One upload, a gallery-ready image.</span>
+            <span className="home-hero-tagline">
+              One upload, a gallery-ready image.
+            </span>
           </h1>
 
           <p className="home-hero-lede">
@@ -108,7 +119,11 @@ const HomeHeroSection = () => {
               </Button>
             </Show>
 
-            <Button asChild variant="ghost" className="hero-pill home-btn-hero-ghost">
+            <Button
+              asChild
+              variant="ghost"
+              className="hero-pill home-btn-hero-ghost"
+            >
               <a href="#how-it-works">Watch 2min demo</a>
             </Button>
           </div>
@@ -131,10 +146,9 @@ const HomeHeroSection = () => {
             </div>
           </div>
         </div>
-</div>
-          
-      </section>
-  )
-}
+      </div>
+    </section>
+  );
+};
 
-export default HomeHeroSection
+export default HomeHeroSection;
