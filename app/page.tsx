@@ -3,6 +3,7 @@ import { GalleryShowcaseSection } from "@/components/GalleryShowcaseSection";
 import HomeHeroSection from "@/components/HomeHeroSection";
 import { HowItWorksSection } from "@/components/HowItWorksSection";
 import { PricingSection } from "@/components/PricingSection";
+import { FAQSection } from "@/components/FAQSection";
 import Testimonials from "@/components/Testimonials";
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
       <GalleryShowcaseSection />
       <HowItWorksSection />
       <PricingSection />
+      <FAQSection />
       <Testimonials />
       <Footer />
     </main>

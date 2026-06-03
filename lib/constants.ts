@@ -49,6 +49,7 @@ export const FOOTER_QUICK_LINKS = [
   { label: "Pricing", href: "#pricing" },
   { label: "Styles", href: "#styles" },
   { label: "How it works", href: "#how-it-works" },
+  { label: "Privacy", href: "/privacy" },
   { label: "Studio", href: "/studio" },
 ] as const;
 

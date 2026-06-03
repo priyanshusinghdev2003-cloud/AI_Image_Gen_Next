@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 // @ts-ignore: CSS module declarations are handled by Next.js
 import "./globals.css";
+import { clerkModalAppearance } from "@/lib/clerk-modal-appearance";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +30,7 @@ export default function RootLayout({
       <body
         
       >
-        <ClerkProvider>
+        <ClerkProvider appearance={clerkModalAppearance}>
           {children}
         </ClerkProvider>
       </body>
