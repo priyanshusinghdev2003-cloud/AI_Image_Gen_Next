@@ -1,10 +1,24 @@
+import StudioWorkbench from "@/components/studio/workbench";
 import { Button } from "@/components/ui/button";
+import { listUserGenerationSummaries } from "@/db/generations";
+import { getGenerationQuotaSnapshot, MONTHLY_GENERATION_LIMITS } from "@/lib/generation-quota";
 import { UserButton } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import Image from "next/image";
 import Link from "next/link";
-import React from "react";
 
-const StudioPage = () => {
+async function StudioPage() {
+  const { userId, has } = await auth();
+  const initialHistory = userId ? await listUserGenerationSummaries(userId) : [];
+  const initialQuota =
+    userId != null
+      ? await getGenerationQuotaSnapshot(has, userId)
+      : {
+          limit: MONTHLY_GENERATION_LIMITS.free,
+          used: 0,
+          remaining: MONTHLY_GENERATION_LIMITS.free,
+        };
+
   return (
     <main className="studio-shell min-h-screen px-4 py-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1440px]">
@@ -25,6 +39,7 @@ const StudioPage = () => {
               Luma Studio
             </p>
           </Link>
+
           <div className="flex items-center gap-3 self-end sm:self-auto">
             <Button
               variant="outline"
@@ -40,9 +55,15 @@ const StudioPage = () => {
             </div>
           </div>
         </header>
+
+        <StudioWorkbench
+          clerkUserId={userId ?? ""}
+          initialHistory={initialHistory}
+          initialQuota={initialQuota}
+        />
       </div>
     </main>
   );
-};
+}
 
 export default StudioPage;
