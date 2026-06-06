@@ -4,10 +4,10 @@ import Link from "next/link";
 import { ChevronDownIcon, RefreshCcwIcon, SparklesIcon, UploadIcon } from "lucide-react";
 
 import {
-  geminiImageModels,
-  geminiImageModelLabels,
-  type GeminiImageModel,
-} from "@/lib/gemini_image_models";
+  openAiImageModels,
+  openAiImageModelLabels,
+  type OpenAiImageModel,
+} from "@/lib/openai-image-models";
 import { stylePresets } from "@/lib/style.presets";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -146,15 +146,15 @@ export function StudioControlsPanel() {
         <div className="mt-4 relative">
           <select
             value={selectedModel}
-            onChange={(event) => selectModel(event.target.value as GeminiImageModel)}
+            onChange={(event) => selectModel(event.target.value as OpenAiImageModel)}
             className={cn(
               buttonVariants({ variant: "outline" }),
               "h-auto w-full appearance-none rounded-[1.2rem] border-border/35 bg-background/25 px-4 py-3 pr-11 font-medium focus:border-primary",
             )}
           >
-            {geminiImageModels.map((model) => (
+            {openAiImageModels.map((model) => (
               <option key={model} value={model}>
-                {geminiImageModelLabels[model]}
+                {openAiImageModelLabels[model]}
               </option>
             ))}
           </select>
@@ -163,7 +163,7 @@ export function StudioControlsPanel() {
         </div>
 
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Only image-capable Gemini models are shown here so generation stays compatible with
+          Only image-capable OpenAI models are shown here so generation stays compatible with
           your uploaded-image workflow.
         </p>
       </div>
@@ -175,7 +175,7 @@ export function StudioControlsPanel() {
       <GenerateButton disabled={isGenerateDisabled} isLoading={isLoading} />
 
       <p className="mt-5 text-center text-lg text-muted-foreground">
-        Styling is powered by Gemini image generation.
+        Styling is powered by OpenAI image generation.
       </p>
 
       {error ? (

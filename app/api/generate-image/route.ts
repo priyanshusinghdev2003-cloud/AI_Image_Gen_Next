@@ -1,22 +1,20 @@
-import {
-  countGenerationsSince,
-  createGeneration,
-  utcMonthStart,
-} from "@/db/generations";
+import { countGenerationsSince, createGeneration, utcMonthStart } from "@/db/generations";
 import { getMonthlyGenerationLimit } from "@/lib/generation-quota";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { generateImage } from "ai";
+
 import * as Sentry from "@sentry/nextjs";
-import { ai } from "@/lib/gemini";
+import { openaiProvider } from "@/lib/openai";
 import { ACCEPTED_SOURCE_IMAGE_MIME_TYPES } from "@/lib/constants";
-import { geminiImageModels } from "@/lib/gemini_image_models";
 import { getStylePreset } from "@/lib/style.presets";
 
+import { APICallError, generateImage, NoImageGeneratedError } from "ai";
 import { uploadBufferToImageKit } from "@/lib/imagekit";
 
 export const runtime = "nodejs";
+
+type EditImageSize = "1024x1024" | "1536x1024" | "1024x1536";
 
 type GenerateImageRequest = {
   sourceImageUrl?: string;
@@ -26,22 +24,25 @@ type GenerateImageRequest = {
   model?: string;
 };
 
-async function inferGeminiAspectRatio(
-  imageBuffer: Buffer,
-): Promise<"1:1" | "4:3" | "3:4"> {
+/**
+ * inferImageSize reads width and height from the uploaded image (via sharp), computes aspect ratio,
+ * and returns one of the allowed `size` values for OpenAI image edits.
+ */
+async function inferImageSize(imageBuffer: Buffer): Promise<EditImageSize> {
   try {
     const metadata = await sharp(imageBuffer).metadata();
 
     if (!metadata.width || !metadata.height) {
-      return "1:1";
+      return "1024x1024";
     }
 
     const aspectRatio = metadata.width / metadata.height;
-    if (aspectRatio > 1.08) return "4:3";
-    if (aspectRatio < 0.92) return "3:4";
-    return "1:1";
+
+    if (aspectRatio > 1.08) return "1536x1024"; // this means that the input image is wider than it is tall
+    if (aspectRatio < 0.92) return "1024x1536"; // this means that the input image is taller than it is wide
+    return "1024x1024"; // this means that the input image is square
   } catch {
-    return "1:1";
+    return "1024x1024";
   }
 }
 
@@ -72,29 +73,19 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!ai) {
-    return NextResponse.json(
-      { error: "Missing GEMINI_API_KEY." },
-      { status: 500 },
-    );
+  if (!openaiProvider) {
+    return NextResponse.json({ error: "Missing OPENAI_API_KEY." }, { status: 500 });
   }
 
   const body = (await request.json()) as GenerateImageRequest;
 
-  const { model, originalFileName, sourceImageUrl, sourceMimeType, styleSlug } =
-    body;
+  const { model, originalFileName, sourceImageUrl, sourceMimeType, styleSlug } = body;
 
   if (!sourceImageUrl) {
-    return NextResponse.json(
-      { error: "Please upload an image first." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Please upload an image first." }, { status: 400 });
   }
 
-  if (
-    typeof sourceMimeType !== "string" ||
-    !ACCEPTED_SOURCE_IMAGE_MIME_TYPES.has(sourceMimeType)
-  ) {
+  if (typeof sourceMimeType !== "string" || !ACCEPTED_SOURCE_IMAGE_MIME_TYPES.has(sourceMimeType)) {
     return NextResponse.json(
       { error: "Only JPG, PNG, and WEBP files are supported." },
       { status: 400 },
@@ -102,32 +93,16 @@ export async function POST(request: Request) {
   }
 
   if (typeof styleSlug !== "string") {
-    return NextResponse.json(
-      { error: "Please choose a style." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Please choose a style." }, { status: 400 });
   }
 
   if (!model) {
-    return NextResponse.json(
-      { error: "Please choose a model." },
-      { status: 400 },
-    );
-  }
-
-  if (!geminiImageModels.includes(model)) {
-    return NextResponse.json(
-      { error: "Selected Gemini model is not available for image generation." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Please choose a model." }, { status: 400 });
   }
 
   const preset = getStylePreset(styleSlug);
   if (!preset) {
-    return NextResponse.json(
-      { error: "Unknown style preset." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Unknown style preset." }, { status: 400 });
   }
 
   const imageResponse = await fetch(sourceImageUrl);
@@ -139,7 +114,7 @@ export async function POST(request: Request) {
   }
 
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-  const imageAspectRatio = await inferGeminiAspectRatio(imageBuffer);
+  const imageSize = await inferImageSize(imageBuffer);
 
   const prompt = [
     preset.prompt,
@@ -147,47 +122,38 @@ export async function POST(request: Request) {
   ].join("\n\n");
 
   try {
+    // generateImage =>
+
     const result = await Sentry.startSpan(
       {
-        name: `image generate ${model}`,
+        name: `image edit ${model}`,
         op: "gen_ai.request",
         attributes: {
           "gen_ai.request.model": model,
           "gen_ai.operation.name": "request",
           "gen_ai.request.messages": JSON.stringify([
             { role: "user", content: prompt },
+            { role: "user", content: "[source image attachment omitted]" },
           ]),
         },
       },
       async (span) => {
-        console.log("imageAspectRatio:", imageAspectRatio);
         const out = await generateImage({
-          model,
+          model: openaiProvider!.imageModel(model),
           prompt: {
             images: [imageBuffer],
             text: prompt,
           },
-          size:
-            imageAspectRatio === "1:1"
-              ? "1024x1024"
-              : imageAspectRatio === "4:3"
-                ? "1536x1024"
-                : "1024x1536",
+          size: imageSize,
           providerOptions: {
-            google: {
-              imageGeneration: {
-                imageAspectRatio,
-              },
+            openai: {
+              input_fidelity: "high", // this means that the input image is used as a reference for the generation,
+              quality: "medium", // this means that the output image is of medium quality
+              output_format: "png",
+              user: userId,
             },
           },
         });
-
-        span.setAttribute(
-          "gen_ai.response.text",
-          JSON.stringify([
-            "[image/png generated; pixel data not sent to Sentry]",
-          ]),
-        );
 
         const u = out.usage;
 
@@ -204,9 +170,7 @@ export async function POST(request: Request) {
 
         span.setAttribute(
           "gen_ai.response.text",
-          JSON.stringify([
-            "[image/png generated; pixel data not sent to Sentry]",
-          ]),
+          JSON.stringify(["[image/png generated; pixel data not sent to Sentry]"]),
         );
 
         return out;
@@ -214,10 +178,6 @@ export async function POST(request: Request) {
     );
 
     const imageBase64 = result.image.base64;
-
-    if (!imageBase64) {
-      throw new Error("The model did not return an image.");
-    }
 
     const resultBuffer = Buffer.from(imageBase64, "base64");
 
@@ -230,8 +190,7 @@ export async function POST(request: Request) {
 
     const savedGeneration = await createGeneration({
       clerkUserId: userId,
-      originalFileName:
-        typeof originalFileName === "string" ? originalFileName : null,
+      originalFileName: typeof originalFileName === "string" ? originalFileName : null,
       sourceImageUrl,
       resultImageUrl,
       styleSlug: preset.slug,
@@ -257,13 +216,19 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("generate-image route failed", error);
 
+    if (APICallError.isInstance(error)) {
+      return NextResponse.json(
+        { error: error.message || "Image generation failed. Please try again." },
+        { status: error.statusCode ?? 500 },
+      );
+    }
+
+    if (NoImageGeneratedError.isInstance(error)) {
+      return NextResponse.json({ error: "The model did not return an image." }, { status: 502 });
+    }
+
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Image generation failed. Please try again.",
-      },
+      { error: "Image generation failed. Please try again." },
       { status: 500 },
     );
   }
